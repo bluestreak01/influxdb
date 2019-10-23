@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"sync"
 	"time"
@@ -660,6 +661,14 @@ func (e *Engine) deleteBucketRangeLocked(ctx context.Context, orgID, bucketID pl
 	name := models.EscapeMeasurement(encoded[:])
 
 	return e.engine.DeletePrefixRange(ctx, name, min, max, pred)
+}
+
+func (e *Engine) CreateBackup(ctx context.Context) (int, []string, error) {
+	return e.engine.CreateBackup(ctx)
+}
+
+func (e *Engine) FetchBackupFile(ctx context.Context, backupID int, backupFile string, w io.Writer) error {
+	return e.engine.FetchBackupFile(ctx, backupID, backupFile, w)
 }
 
 // SeriesCardinality returns the number of series in the engine.

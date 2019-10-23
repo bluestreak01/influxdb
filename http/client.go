@@ -19,6 +19,7 @@ type Service struct {
 	*BucketService
 	*VariableService
 	*DashboardService
+	*BackupService
 }
 
 // NewService returns a service that is an HTTP
@@ -48,6 +49,10 @@ func NewService(addr, token string) *Service {
 			Token: token,
 		},
 		VariableService: &VariableService{
+			Addr:  addr,
+			Token: token,
+		},
+		BackupService: &BackupService{
 			Addr:  addr,
 			Token: token,
 		},

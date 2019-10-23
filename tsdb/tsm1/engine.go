@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/influxdata/influxdb"
@@ -799,8 +802,9 @@ func (e *Engine) WriteSnapshot(ctx context.Context, status CacheStatus) error {
 	if err != nil && err != errCompactionsDisabled {
 		e.logger.Info("Error writing snapshot", zap.Error(err))
 	}
-	e.compactionTracker.SnapshotAttempted(err == nil || err == errCompactionsDisabled ||
-		err == ErrSnapshotInProgress, status, time.Since(start))
+	e.compactionTracker.SnapshotAttempted(
+		err == nil || err == errCompactionsDisabled || err == ErrSnapshotInProgress,
+		status, time.Since(start))
 
 	if err != nil {
 		return err
@@ -920,6 +924,72 @@ func (e *Engine) compactCache() {
 	}
 }
 
+func (e *Engine) CreateBackup(ctx context.Context) (int, []string, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx)
+	span.LogKV("path", e.path)
+
+	err := e.WriteSnapshot(ctx, CacheStatusBackup)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	id, snapshotPath, err := e.FileStore.CreateSnapshot(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	fileInfos, err := ioutil.ReadDir(snapshotPath)
+	if err != nil {
+		return 0, nil, err
+	}
+	filenames := make([]string, len(fileInfos))
+	for i, fi := range fileInfos {
+		filenames[i] = fi.Name()
+	}
+
+	return id, filenames, nil
+}
+
+func (e *Engine) FetchBackupFile(ctx context.Context, backupID int, backupFile string, w io.Writer) error {
+	span, ctx := tracing.StartSpanFromContext(ctx)
+	span.LogKV("path", e.path)
+
+	backupPath := e.FileStore.BackupPath(backupID)
+	if fi, err := os.Stat(backupPath); err != nil {
+		if os.IsNotExist(err) {
+			return errors.Errorf("backup %d not found", backupID)
+		}
+		return errors.WithMessagef(err, "failed to locate backup %d", backupID)
+	} else {
+		if !fi.IsDir() {
+			return errors.Errorf("error in filesystem path of backup %d", backupID)
+		}
+	}
+
+	backupFileFullPath := filepath.Join(backupPath, backupFile)
+	file, err := os.Open(backupFileFullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errors.Errorf("backup file %d/%s not found", backupID, backupFile)
+		}
+		return errors.WithMessagef(err, "failed to open backup file %d/%s", backupID, backupFile)
+	}
+	defer file.Close()
+
+	buf := make([]byte, 1024*1024)
+	_, err = io.CopyBuffer(w, file, buf)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to copy backup file %d/%s to writer", backupID, backupFile)
+	}
+
+	err = syscall.Unlink(backupFileFullPath)
+	if err != nil {
+		e.logger.Info("failed to unlink backup file after fetch", zap.Error(err), zap.Int("backup_id", backupID), zap.String("backup_file", backupFile))
+	}
+
+	return nil
+}
+
 // CacheStatus describes the current state of the cache, with respect to whether
 // it is ready to be snapshotted or not.
 type CacheStatus int
@@ -932,6 +1002,7 @@ const (
 	CacheStatusColdNoWrites                      // The cache has not been written to for long enough that it should be snapshotted.
 	CacheStatusRetention                         // The cache was snapshotted before running retention.
 	CacheStatusFullCompaction                    // The cache was snapshotted as part of a full compaction.
+	CacheStatusBackup                            // The cache was snapshotted before running backup.
 )
 
 // ShouldCompactCache returns a status indicating if the Cache should be

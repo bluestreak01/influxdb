@@ -21,6 +21,7 @@ type APIHandler struct {
 	influxdb.HTTPErrorHandler
 	AssetHandler                *AssetHandler
 	AuthorizationHandler        *AuthorizationHandler
+	BackupHandler               *BackupHandler
 	BucketHandler               *BucketHandler
 	CheckHandler                *CheckHandler
 	ChronografHandler           *ChronografHandler
@@ -62,6 +63,7 @@ type APIBackend struct {
 
 	PointsWriter                    storage.PointsWriter
 	DeleteService                   influxdb.DeleteService
+	BackupService                   influxdb.BackupService
 	AuthorizationService            influxdb.AuthorizationService
 	BucketService                   influxdb.BucketService
 	SessionService                  influxdb.SessionService
@@ -213,6 +215,9 @@ func NewAPIHandler(b *APIBackend, opts ...APIHandlerOptFn) *APIHandler {
 	deleteBackend := NewDeleteBackend(b)
 	h.DeleteHandler = NewDeleteHandler(deleteBackend)
 
+	backupBackend := NewBackupBackend(b)
+	h.BackupHandler = NewBackupHandler(backupBackend)
+
 	fluxBackend := NewFluxBackend(b)
 	h.QueryHandler = NewFluxHandler(fluxBackend)
 
@@ -227,16 +232,18 @@ var apiLinks = map[string]interface{}{
 	// when adding new links, please take care to keep this list alphabetical
 	// as this makes it easier to verify values against the swagger document.
 	"authorizations": "/api/v2/authorizations",
+	"backup":         "/api/v2/backup",
 	"buckets":        "/api/v2/buckets",
+	"checks":         "/api/v2/checks",
 	"dashboards":     "/api/v2/dashboards",
+	"delete":         "/api/v2/delete",
 	"external": map[string]string{
 		"statusFeed": "https://www.influxdata.com/feed/json",
 	},
 	"labels":                "/api/v2/labels",
-	"variables":             "/api/v2/variables",
 	"me":                    "/api/v2/me",
-	"notificationRules":     "/api/v2/notificationRules",
 	"notificationEndpoints": "/api/v2/notificationEndpoints",
+	"notificationRules":     "/api/v2/notificationRules",
 	"orgs":                  "/api/v2/orgs",
 	"query": map[string]string{
 		"self":        "/api/v2/query",
@@ -244,11 +251,11 @@ var apiLinks = map[string]interface{}{
 		"analyze":     "/api/v2/query/analyze",
 		"suggestions": "/api/v2/query/suggestions",
 	},
+	"scrapers": "/api/v2/scrapers",
 	"setup":    "/api/v2/setup",
 	"signin":   "/api/v2/signin",
 	"signout":  "/api/v2/signout",
 	"sources":  "/api/v2/sources",
-	"scrapers": "/api/v2/scrapers",
 	"swagger":  "/api/v2/swagger.json",
 	"system": map[string]string{
 		"metrics": "/metrics",
@@ -256,11 +263,10 @@ var apiLinks = map[string]interface{}{
 		"health":  "/health",
 	},
 	"tasks":     "/api/v2/tasks",
-	"checks":    "/api/v2/checks",
 	"telegrafs": "/api/v2/telegrafs",
 	"users":     "/api/v2/users",
+	"variables": "/api/v2/variables",
 	"write":     "/api/v2/write",
-	"delete":    "/api/v2/delete",
 }
 
 func (h *APIHandler) serveLinks(w http.ResponseWriter, r *http.Request) {
@@ -300,6 +306,11 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/api/v2/delete") {
 		h.DeleteHandler.ServeHTTP(w, r)
+		return
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/api/v2/backup") {
+		h.BackupHandler.ServeHTTP(w, r)
 		return
 	}
 

@@ -33,6 +33,7 @@ const maxTCPConnections = 128
 func init() {
 	influxCmd.AddCommand(
 		authorizationCmd,
+		backupCmd,
 		bucketCmd,
 		deleteCmd,
 		organizationCmd,
