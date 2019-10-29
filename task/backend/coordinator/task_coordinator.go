@@ -53,8 +53,7 @@ func (t SchedulableTask) Schedule() scheduler.Schedule {
 
 // Offset returns a time.Duration for the Task's offset property
 func (t SchedulableTask) Offset() time.Duration {
-	offset, _ := t.OffsetDuration()
-	return offset
+	return t.Task.Offset
 }
 
 // LastScheduled parses the task's LatestCompleted value as a Time object
@@ -62,13 +61,12 @@ func (t SchedulableTask) LastScheduled() time.Time {
 	if !t.LatestScheduled.IsZero() {
 		return t.LatestScheduled
 	}
-	if t.LatestCompleted != "" {
-		latestCompleted, _ := t.LatestCompletedTime()
+	if !t.LatestCompleted.IsZero() {
+		latestCompleted := t.LatestCompleted
 		return latestCompleted
 	}
 
-	createdAt, _ := time.Parse(time.RFC3339, t.CreatedAt)
-	return createdAt
+	return t.CreatedAt
 }
 
 func WithLimitOpt(i int) CoordinatorOption {
@@ -79,13 +77,7 @@ func WithLimitOpt(i int) CoordinatorOption {
 
 // NewSchedulableTask transforms an influxdb task to a schedulable task type
 func NewSchedulableTask(task *influxdb.Task) (SchedulableTask, error) {
-	if offset, err := task.OffsetDuration(); offset != time.Duration(0) && err != nil {
-		return SchedulableTask{}, errors.New("could not create schedulable task: offset duration could not be parsed")
-	}
 
-	if _, err := task.LatestCompletedTime(); err != nil {
-		return SchedulableTask{}, errors.New("could not create schedulable task: latest completed time could not be parsed")
-	}
 	if task.Cron == "" && task.Every == "" {
 		return SchedulableTask{}, errors.New("invalid cron or every")
 	}

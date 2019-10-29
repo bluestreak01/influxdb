@@ -180,6 +180,23 @@ type taskResponse struct {
 
 // NewFrontEndTask converts a internal task type to a task that we want to display to users
 func NewFrontEndTask(t influxdb.Task) Task {
+	latestCompleted := ""
+	if !t.LatestCompleted.IsZero() {
+		latestCompleted = t.LatestCompleted.Format(time.RFC3339)
+	}
+	createdAt := ""
+	if !t.CreatedAt.IsZero() {
+		createdAt = t.CreatedAt.Format(time.RFC3339)
+	}
+	updatedAt := ""
+	if !t.UpdatedAt.IsZero() {
+		updatedAt = t.UpdatedAt.Format(time.RFC3339)
+	}
+	offset := ""
+	if t.Offset != 0*time.Second {
+		offset = t.Offset.String()
+	}
+
 	return Task{
 		ID:              t.ID,
 		OrganizationID:  t.OrganizationID,
@@ -191,12 +208,12 @@ func NewFrontEndTask(t influxdb.Task) Task {
 		Flux:            t.Flux,
 		Every:           t.Every,
 		Cron:            t.Cron,
-		Offset:          t.Offset,
-		LatestCompleted: t.LatestCompleted,
+		Offset:          offset,
+		LatestCompleted: latestCompleted,
 		LastRunStatus:   t.LastRunStatus,
 		LastRunError:    t.LastRunError,
-		CreatedAt:       t.CreatedAt,
-		UpdatedAt:       t.UpdatedAt,
+		CreatedAt:       createdAt,
+		UpdatedAt:       updatedAt,
 		Metadata:        t.Metadata,
 	}
 }
