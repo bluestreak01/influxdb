@@ -464,30 +464,7 @@ func (s *Service) findAllTasks(ctx context.Context, tx Tx, filter influxdb.TaskF
 		c.Seek(key)
 		k, v = c.Next()
 	} else {
-		k, v := c.First()
-		if k == nil {
-			return ts, len(ts), nil
-		}
-
-		t := &influxdb.Task{}
-		if err := json.Unmarshal(v, t); err != nil {
-			return nil, 0, influxdb.ErrInternalTaskServiceError(err)
-		}
-		latestCompleted, err := s.findLatestScheduledTime(ctx, tx, t.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-		if !latestCompleted.IsZero() {
-			t.LatestCompleted = latestCompleted.Format(time.RFC3339)
-		} else {
-			t.LatestCompleted = t.CreatedAt
-		}
-
-		if t != nil {
-			if taskTypeFilterMatch(filter.Type, t.Type) && taskStatusFilterMatch(filter.Active, t.Status) {
-				ts = append(ts, t)
-			}
-		}
+		k, v = c.First()
 	}
 
 	matchFn := newTaskMatchFn(filter, nil)
